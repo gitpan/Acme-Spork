@@ -9,14 +9,17 @@ our @ISA       = qw(Exporter);
 our @EXPORT    = qw(spork);
 our @EXPORT_OK = qw(daemonize);
 
-use version;our $VERSION = qv('0.0.1');
+use version;our $VERSION = qv('0.0.2');
 use POSIX 'setsid';
 
 sub spork {
     my $spork = shift;
     croak "spork() needs a code ref!" if ref $spork ne 'CODE';
     defined(my $pid = fork) or croak qq{Couldn't fork for spork: $!};
-    if(!$pid) {
+    if($pid) { 
+        return $pid; 
+    } 
+    else {
         close $_ for qw(STDIN STDOUT STDERR);
         setsid;
         $spork->(@_);
@@ -39,8 +42,8 @@ Acme::Spork - Perl extension for spork()ing in your script
 =head1 SYNOPSIS
 
   use Acme::Spork;
-  spork(\&long_running_code, @ARGV);
-  print "Long running code has been started, bye!\n";
+  my $spork_pid = spork(\&long_running_code, @ARGV);
+  print "Long running code has been started as PID $spork_pid, bye!\n";
 
 =head1 DESCRIPTION
 
@@ -71,6 +74,8 @@ The first argument is a code ref that gets executed and any other args are passe
 
 This prints out "12" immediately and is done running, now if you tail -f spork.log you'll see "I am spork hear me spoon\n" get written to it 4 or 5 seconds later by the spork()ed process :)
 
+spork() returns the PID of the spork()ed process so you can keep track of them and do what you need with it.
+
 =head1 daemonize()
 
 Since many daemons need to spork a child process when a request is received I've included a cheat function to daemonize your script execution.
@@ -87,8 +92,8 @@ Its simply a wrapper for Proc::Daemon::Init.
 
     # and handle requests as a server:
     while(<$incoming_requests>) {
-        spork(\&log_request($_));
-        spork(\&handle_request($_));
+        my $req_pid = spork(\&handle_request($_));
+        spork(\&log_request($_), $req_pid);
     }
     
 
