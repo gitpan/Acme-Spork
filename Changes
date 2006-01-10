@@ -1,6 +1,16 @@
 Revision history for Perl extension Acme::Spork.
 
-0.01  Fri Jan  6 12:02:38 2006
+0.0.1  Fri Jan  6 12:02:38 2006
 	- original version; created by h2xs 1.23 with options
 		-AXc -n Acme::Spork
 
+0.0.2  Mon Jan  9 20:36:42 2006
+	- made spork return PID of sporked process
+
+0.0.3  Mon Jan  9 20:36:78 2006
+	- realized I hadn't put this in the change log after uploading 0.0.2, doh!
+        - or updated teh version in README
+	- added "the" to the POD near plastic for good measure
+	- make spork() return if fork fails so you can handle the failure as need be
+	- added child sig so zombies do not happen, we hope anyhoo ;p
+        - slowed down to hopefully not miss the stupid stuff
