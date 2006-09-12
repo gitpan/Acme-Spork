@@ -7,9 +7,9 @@ use Carp;
 require Exporter;
 our @ISA       = qw(Exporter);
 our @EXPORT    = qw(spork);
-our @EXPORT_OK = qw(daemonize);
+our @EXPORT_OK = qw(daemonize daemonize_without_close_on);
 
-use version;our $VERSION = qv('0.0.3');
+use version;our $VERSION = qv('0.0.4');
 use POSIX 'setsid';
 
 sub spork {
@@ -29,7 +29,21 @@ sub spork {
 
 sub daemonize {
     require Proc::Daemon;
-    goto &Proc::Daemon::Init;
+    {
+        local $SIG{'HUP'} = $SIG{'HUP'} || ''; # workaround until http://rt.cpan.org/Public/Bug/Display.html?id=21453
+        goto &Proc::Daemon::Init;
+    }
+}
+
+sub daemonize_without_close_on {
+    require Proc::Daemon;
+    {
+        no warnings 'redefine';
+        local *POSIX::close = sub { return 1; }; # the "without_close_on" part
+
+        local $SIG{'HUP'} = $SIG{'HUP'} || ''; # workaround until http://rt.cpan.org/Public/Bug/Display.html?id=21453
+        Proc::Daemon::Init(@_);
+    }
 }
 
 1;
@@ -97,10 +111,14 @@ Its simply a wrapper for Proc::Daemon::Init.
     use Acme::Spork qw(daemonize);
 
     # make sure we are the only one running:
-    use Unix::Pid '/var/run/foo.pid';
+    use Unix::Pid '/var/run/this.pid';
 
     # if so make me a daemon:
     daemonize();
+
+    # and redo the pid_file with the new pid
+    Unix::PID->new()->pid_file('/var/run/this.pid') 
+        or die 'The PID in /var/run/this.pid is still running.'; 
 
     # and handle requests as a server:
     while(<$incoming_requests>) {
@@ -113,11 +131,15 @@ Its simply a wrapper for Proc::Daemon::Init.
             warn "Could not spork request: $!";
         }
     }
-    
+
+=head1 daemonize_without_close_on()
+
+Same as daemonize() except it doesn't get Proc::Daemon::Init()'s POSIX::close done.
+Useful if that happening causes you problems (which it has me...)
 
 =head1 EXPORT
 
-spork() is by default, daemonize() can be.
+spork() is by default, daemonize() and daemonize_without_close_on() can be.
 
 =head1 SEE ALSO
 

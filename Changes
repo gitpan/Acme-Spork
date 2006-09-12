@@ -9,8 +9,14 @@ Revision history for Perl extension Acme::Spork.
 
 0.0.3  Mon Jan  9 20:36:78 2006
 	- realized I hadn't put this in the change log after uploading 0.0.2, doh!
-        - or updated teh version in README
+        - or updated the version in README
 	- added "the" to the POD near plastic for good measure
-	- make spork() return if fork fails so you can handle the failure as need be
+	- make spork() return (instead of croak) if fork fails so you can handle the failure as need be
 	- added child sig so zombies do not happen, we hope anyhoo ;p
         - slowed down to hopefully not miss the stupid stuff
+
+0.0.4  Tue Sep 12 20:38:30 CDT 2006
+    - added daemonize_without_close_on()
+    - added local $SIG{'HUP'} until Proc::Daemon comes around
+	- fixed 0.0.3 above :)
+	- fixed daemonize() example use of Unix::Pid to properly do pid file after daemonize changes the pid
