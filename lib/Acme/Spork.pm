@@ -9,13 +9,13 @@ our @ISA       = qw(Exporter);
 our @EXPORT    = qw(spork);
 our @EXPORT_OK = qw(daemonize daemonize_without_close_on);
 
-use version;our $VERSION = qv('0.0.4');
+use version;our $VERSION = qv('0.0.5');
 use POSIX 'setsid';
 
 sub spork {
     my $spork = shift;
     croak "spork() needs a code ref!" if ref $spork ne 'CODE';
-    $SIG{'CHLD'} = 'IGNORE';
+    local $SIG{'CHLD'} = defined $SIG{'CHLD'} ? $SIG{'CHLD'} : 'IGNORE';
     defined(my $pid = fork) or return; # croak qq{Couldn't fork for spork: $!};
     if($pid) { 
         return $pid; 

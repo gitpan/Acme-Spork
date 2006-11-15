@@ -20,3 +20,7 @@ Revision history for Perl extension Acme::Spork.
     - added local $SIG{'HUP'} until Proc::Daemon comes around
 	- fixed 0.0.3 above :)
 	- fixed daemonize() example use of Unix::Pid to properly do pid file after daemonize changes the pid
+	
+0.0.5  Wed Nov 15 17:51:02 2006
+	- keeps $SIG{'CHLD'} if defined instead of using IGNORE
+	- local()ize'd $SIG{'CHLD'}
