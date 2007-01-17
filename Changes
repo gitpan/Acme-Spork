@@ -27,3 +27,6 @@ Revision history for Perl extension Acme::Spork.
 
 0.0.6  	Tue Jan 16 23:54:01 2007
     - added @reopen_to
+
+0.0.7  Wed Jan 17 09:52:55 2007
+	- changed 0.0.6 to %reopen_stdfhs_to for clarity

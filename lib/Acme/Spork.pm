@@ -9,10 +9,22 @@ our @ISA       = qw(Exporter);
 our @EXPORT    = qw(spork);
 our @EXPORT_OK = qw(daemonize daemonize_without_close_on);
 
-use version;our $VERSION = qv('0.0.6');
+use version;our $VERSION = qv('0.0.7');
 use POSIX 'setsid';
 
-our %reopen_to;
+our %reopen_stdfhs_to;
+
+sub import {
+    shift->export_to_level(1, grep(!/^-/, @_));
+    if(grep /^-reopen_stdfhs$/, @_) {
+        %reopen_stdfhs_to = (
+             STDIN  => [qw(< /dev/null)],
+             STDOUT => [qw(> /dev/null)],
+             STDERR => [qw(>&STDOUT)],
+        );
+    }
+    return;
+}
 
 sub spork {
     my $spork = shift;
@@ -24,15 +36,16 @@ sub spork {
         return $pid; 
     } 
     else {
-        my @close = qw(STDIN STDOUT STDERR);
-        close $_ for @close;
-        
-        for my $idx (0..2) {
-            my $flavor = $idx eq '0' ? '<' : '>';
-            my $reopen = $idx eq '2' ? '&STDOUT' : '/dev/null';
-            open $close[$idx], $flavor, $reopen;
+        for my $stdfh (qw(STDIN STDOUT STDERR)) {
+            close $stdfh;
+            if(exists $reopen_stdfhs_to{ $stdfh } && ref $reopen_stdfhs_to{ $stdfh } eq 'ARRAY') {
+                eval  "open( $stdfh, " . join(', ', map { qq{"$_"} } @{ $reopen_stdfhs_to{ $stdfh } }) . ' );';
+                carp "Could not reopen $stdfh : $@" if $@; 
+                # no strict 'refs';
+                # open( $stdfh , @{ $reopen_stdfhs_to{ $stdfh } }) or carp "Could not reopen $stdfh : $!";
+            }
         }
-
+ 
         setsid;
         $spork->(@_);
     }
@@ -113,13 +126,29 @@ If it returns false then fork failed so you can:
     }
     my $spork_pid = spork(\&foo) or die "Could not fork for for spork: $!";
 
-=head2 @reopen_to
+=head2 %reopen_stdfhs_to
 
-You can no specify where the clodes go STDIN, STDOUT, STDERR handled to after the process is done.
-Setup handle to reopen STD
+You can now have spork reopen one or more of STDIN, STDOUT, STDERR.
+You define how this is handled in the Acme::Spork hash '%reopen_stdfhs_to'
 
-    local @Acme::Spork::reopen_to($stdin, $stdout, $stderr);
+The key is the STD* handle (any other values are simply ignored).
+
+The value is an array reference of arguments to open().
+
+Its always a good idea to local()ize it as well (and specify all 3 handles, otherwise you may get soem strange warnings and behavior):
+
+    local %Acme::Spork::reopen_stdfhs_to = (
+         STDIN  => [qw(< /dev/null)],
+         STDOUT => [qw(> /dev/null)],
+         STDERR => [qw(> &STDOUT)],
+    );
     spork(...)    
+    
+or you can have it set to the value above globally like so:
+
+    use Acme::Spork qw(-reopen_stdfhs);
+    ...
+    spork(...)
 
 =head1 daemonize()
 
