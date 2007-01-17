@@ -24,3 +24,6 @@ Revision history for Perl extension Acme::Spork.
 0.0.5  Wed Nov 15 17:51:02 2006
 	- keeps $SIG{'CHLD'} if defined instead of using IGNORE
 	- local()ize'd $SIG{'CHLD'}
+
+0.0.6  	Tue Jan 16 23:54:01 2007
+    - added @reopen_to

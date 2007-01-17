@@ -9,19 +9,30 @@ our @ISA       = qw(Exporter);
 our @EXPORT    = qw(spork);
 our @EXPORT_OK = qw(daemonize daemonize_without_close_on);
 
-use version;our $VERSION = qv('0.0.5');
+use version;our $VERSION = qv('0.0.6');
 use POSIX 'setsid';
+
+our %reopen_to;
 
 sub spork {
     my $spork = shift;
     croak "spork() needs a code ref!" if ref $spork ne 'CODE';
     local $SIG{'CHLD'} = defined $SIG{'CHLD'} ? $SIG{'CHLD'} : 'IGNORE';
     defined(my $pid = fork) or return; # croak qq{Couldn't fork for spork: $!};
+    
     if($pid) { 
         return $pid; 
     } 
     else {
-        close $_ for qw(STDIN STDOUT STDERR);
+        my @close = qw(STDIN STDOUT STDERR);
+        close $_ for @close;
+        
+        for my $idx (0..2) {
+            my $flavor = $idx eq '0' ? '<' : '>';
+            my $reopen = $idx eq '2' ? '&STDOUT' : '/dev/null';
+            open $close[$idx], $flavor, $reopen;
+        }
+
         setsid;
         $spork->(@_);
     }
@@ -101,6 +112,14 @@ If it returns false then fork failed so you can:
         print "Could not fork for spork: $!";
     }
     my $spork_pid = spork(\&foo) or die "Could not fork for for spork: $!";
+
+=head2 @reopen_to
+
+You can no specify where the clodes go STDIN, STDOUT, STDERR handled to after the process is done.
+Setup handle to reopen STD
+
+    local @Acme::Spork::reopen_to($stdin, $stdout, $stderr);
+    spork(...)    
 
 =head1 daemonize()
 
