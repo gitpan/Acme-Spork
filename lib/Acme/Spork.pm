@@ -3,14 +3,14 @@ package Acme::Spork;
 use strict;
 use warnings;
 use Carp;
+use IO::Handle;
 
 require Exporter;
 our @ISA       = qw(Exporter);
 our @EXPORT    = qw(spork);
 our @EXPORT_OK = qw(daemonize daemonize_without_close_on);
 
-use version;our $VERSION = qv('0.0.7');
-use POSIX 'setsid';
+use version;our $VERSION = qv('0.0.8');
 
 our %reopen_stdfhs_to;
 
@@ -29,25 +29,62 @@ sub import {
 sub spork {
     my $spork = shift;
     croak "spork() needs a code ref!" if ref $spork ne 'CODE';
-    local $SIG{'CHLD'} = defined $SIG{'CHLD'} ? $SIG{'CHLD'} : 'IGNORE';
-    defined(my $pid = fork) or return; # croak qq{Couldn't fork for spork: $!};
     
-    if($pid) { 
-        return $pid; 
-    } 
+    my $PARENT_WTR = IO::Handle->new;
+    my $CHILD_RDR  = IO::Handle->new;
+
+    pipe($CHILD_RDR,  $PARENT_WTR); # or return/croak ?
+    $PARENT_WTR->autoflush(1);
+
+    defined (my $kid = fork) or die "Cannot fork: $!\n";
+    
+    if ($kid) {
+        close $PARENT_WTR;
+        chomp(my $grandkid_pid = <$CHILD_RDR>);
+        close $CHILD_RDR; 
+        waitpid($kid,0);
+        return $grandkid_pid;
+    }
     else {
-        for my $stdfh (qw(STDIN STDOUT STDERR)) {
-            close $stdfh;
-            if(exists $reopen_stdfhs_to{ $stdfh } && ref $reopen_stdfhs_to{ $stdfh } eq 'ARRAY') {
-                eval  "open( $stdfh, " . join(', ', map { qq{"$_"} } @{ $reopen_stdfhs_to{ $stdfh } }) . ' );';
-                carp "Could not reopen $stdfh : $@" if $@; 
-                # no strict 'refs';
-                # open( $stdfh , @{ $reopen_stdfhs_to{ $stdfh } }) or carp "Could not reopen $stdfh : $!";
-            }
+        ## local $SIG{CHLD} = 'IGNORE';
+        if (!defined &setsid) {                
+            require POSIX;
+            *setsid = *POSIX::setsid;
         }
- 
-        setsid;
-        $spork->(@_);
+        setsid();
+        ##
+        
+        defined ( my $grandkid = fork) or die "Kid cannot fork: $!\n";
+        if ($grandkid) {
+            close $CHILD_RDR; 
+            print $PARENT_WTR "$grandkid\n";
+            close $PARENT_WTR;
+            CORE::exit(0);
+        }
+        else {
+            close $CHILD_RDR;
+            close $PARENT_WTR;
+            
+            for my $stdfh (qw(STDIN STDOUT STDERR)) {
+                close $stdfh;
+                if(exists $reopen_stdfhs_to{ $stdfh } && ref $reopen_stdfhs_to{ $stdfh } eq 'ARRAY') {
+                    eval  "open( $stdfh, " . join(', ', map { qq{"$_"} } @{ $reopen_stdfhs_to{ $stdfh } }) . ' );';
+                    carp "Could not reopen $stdfh : $@" if $@; 
+                    # no strict 'refs';
+                    # open( $stdfh , @{ $reopen_stdfhs_to{ $stdfh } }) or carp "Could not reopen $stdfh : $!";
+                }
+            }
+            
+            ## if (!defined &setsid) {                
+            ##     require POSIX;
+            ##     *setsid = *POSIX::setsid;
+            ## }
+            ## 
+            ## setsid();
+            ## $SIG{CHLD} = 'DEFAULT';
+            $spork->(@_);
+            CORE::exit(0);
+        }
     }
 }   
 
@@ -135,7 +172,7 @@ The key is the STD* handle (any other values are simply ignored).
 
 The value is an array reference of arguments to open().
 
-Its always a good idea to local()ize it as well (and specify all 3 handles, otherwise you may get soem strange warnings and behavior):
+Its always a good idea to local()ize it as well (and specify all 3 handles, otherwise you may get some strange warnings and behavior):
 
     local %Acme::Spork::reopen_stdfhs_to = (
          STDIN  => [qw(< /dev/null)],
@@ -149,6 +186,25 @@ or you can have it set to the value above globally like so:
     use Acme::Spork qw(-reopen_stdfhs);
     ...
     spork(...)
+
+=head2 setsid()
+
+Say you have a custom module that is a subset of POSIX functions that includes setsid() and you'd rather use that one instead of bringing in all of POSIX.
+
+Just define Acme::Spork::setsid ()
+
+   sub Acme::Spork::setsid {
+       require POSIX::Subset;
+       POSIX::Subset::setsid();  
+   }
+   my $pid = spork(...);
+
+or if you already have the module loaded:
+
+  *Acme::Spork::setsid = *POSIX::Subset::setsid;
+   my $pid = spork(...);
+
+It will use your setsid() instead and POSIX will not be brought in. If it doesn't actually setsid() then you just broke yourself so don't do that.
 
 =head1 daemonize()
 
@@ -184,6 +240,10 @@ Its simply a wrapper for Proc::Daemon::Init.
 
 Same as daemonize() except it doesn't get Proc::Daemon::Init()'s POSIX::close done.
 Useful if that happening causes you problems (which it has me...)
+
+=head1 CAVEAT
+
+If you set $SIG{CHLD} to 'IGNORE' all your $?'s will be -1 (i.e not what you might be expecting)
 
 =head1 EXPORT
 

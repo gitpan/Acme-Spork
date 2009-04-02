@@ -30,3 +30,11 @@ Revision history for Perl extension Acme::Spork.
 
 0.0.7  Wed Jan 17 09:52:55 2007
 	- changed 0.0.6 to %reopen_stdfhs_to for clarity
+	
+0.0.8  Wed Apr  1 21:52:29 2009
+    - Double fork to avoid needing to munge $SIG{CHLD} outside of spork()
+    - pipe() to get spork()ed process's PID back for return
+    - $SIG{CHLD} so that $? inside spork() is correct (i.e. not -1 for auto reaped)
+    - the 3 things above also make it zombie safe for when the parent outlives the child
+    - explicit exit after coderef call to avoid "fork doubling"
+    - Ability to define Acme::Spork::setsid() to not use POSIX::setsid() (i.e. to not load POSIX)
